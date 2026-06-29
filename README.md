@@ -24,7 +24,7 @@ To run a simulation, follow these steps:
 
 ## Screenshots
 
-<img src="pictures/simulation_ecosystem.png" alt="Simulation" width="300">
+<img src="pictures/simulation_ecosystem.jpg" alt="Simulation" width="300">
 <img src="pictures/graph_ecosystem_1.png" alt="Overview of population trends" width="300">
 
 ## License
