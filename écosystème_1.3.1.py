@@ -3,7 +3,8 @@
 # GRAPHE : OUI
 # SELECTION DES VARIABLES + FACILE : OUI
 # PORTEE VISUELLE DES ENTITES : OUI
-# CREDITS : ghosthreat
+# CREDITS : Copyright (c) 2026 ghosthreat 
+# LICENSE : MIT
 
 import pygame
 import sys
