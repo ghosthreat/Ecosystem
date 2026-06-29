@@ -2,7 +2,8 @@
 # ACTIVITE : C{erre}, S{chasse C, se reproduit si nourri, meurt sans nourriture}, V{chasse S, se reproduit si nourri, meurt sans nourriture}
 # GRAPHE : OUI
 # PORTEE VISUELLE DES ENTITES : OUI
-# CREDITS : ghosthreat
+# CREDITS : Copyright (c) 2026 ghosthreat 
+# LICENSE : MIT
 
 
 import pygame
