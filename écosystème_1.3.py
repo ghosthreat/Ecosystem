@@ -1,0 +1,578 @@
+# ENTITES : Herbes + Chenilles + Souris + Vipères
+# ACTIVITE : H{pousse à des endroits aléatoires}, C{chasse H, se reproduit si nourri, meurt sans nourriture}, S{chasse C, se reproduit si nourri, meurt sans nourriture}, V{chasse S, se reproduit si nourri, meurt sans nourriture}
+# GRAPHE : OUI
+# SELECTION DES VARIABLES + FACILE : OUI
+# CREDITS : ghosthreat
+
+import pygame
+import sys
+from random import*
+import numpy as np
+import matplotlib.pyplot as plt
+from numpy.random import binomial
+
+# Initialisation
+pygame.init()
+
+# Création de la fenêtre
+l, h= 700, 700
+ecran = pygame.display.set_mode((l, h))
+pygame.display.set_caption("écosystème")
+
+## Création des entités
+class Herbes:
+    def __init__(self,x,y):
+        self.x=x
+        self.y=y
+        self.couleur=(0, 90, 0)
+        self.vie=True
+        self.taille=randint(5,9)
+
+    def draw(self,ecran):
+        pygame.draw.rect(ecran, self.couleur, (self.x, self.y, self.taille, self.taille))
+
+class Chenilles:
+    def __init__(self, x, y):
+        self.dir=0
+        self.x=x
+        self.y=y
+        self.v=2
+        self.couleur=(111, 200, 219)
+        self.vie=True
+        self.nourri=0
+        self.attente=0          # attente avant de chasser
+        self.modif_proies=0
+        self.modif_semblables=0
+        self.lim_vie=-500       # meurt en dessous de cette limite de nourriture
+        self.energie_reprod=200 # énergie pour se reproduire
+        self.gain_energie=500   # énergie gagnée en mangeant
+
+    def update(self, PROIES, SEMBLABLES):
+        # remise à 0 des compteurs:
+        self.modif_semblables=0
+        self.modif_proies=0
+
+        self.nourri-=1
+        if self.nourri<self.lim_vie:
+            self.vie=False
+            self.modif_semblables-=1
+
+        # === REPRODUCTION ===
+        # si nourri et pas seul => cherche à se reproduire
+        if self.nourri>0 and len(SEMBLABLES)>1 and self.attente==0:
+            # trouver le partenaire le plus proche
+            part_plus_proche = None
+            distance_min = float('inf')
+
+            for part in SEMBLABLES:
+                if part.vie and part.nourri>0:# le partenaire doit être vivant + nourri
+                    # calcul de la distance au partenaire
+                    dx = part.x - self.x
+                    dy = part.y - self.y
+                    distance = (dx**2+dy**2)**0.5
+
+                    if distance < distance_min and distance > 0:
+                        distance_min = distance
+                        part_plus_proche = part
+
+            # si on a trouvé un partenaire : on se dirige vers lui
+            if part_plus_proche:
+                dx = part_plus_proche.x - self.x    # dx = distance horizontale
+                dy = part_plus_proche.y - self.y    # dy = distance verticale
+                distance = (dx**2+dy**2)**0.5
+
+                if distance > 5:
+                    dx /= distance
+                    dy /= distance
+                    self.x += dx * self.v
+                    self.y += dy * self.v
+                elif distance < 5:  # partenaire à portée => reproduction
+                    self.modif_semblables+=1
+                    self.nourri-=self.energie_reprod        # utilise son énergie
+                    self.attente+=randint(50,100)           # attend avant de chasser
+
+            else:       # si aucun semblable n'est nourri
+                # rencontre d'un mur : va dans l'autre sens + change de direction
+                if self.x<0:
+                    self.x+=self.v
+                    self.dir=(self.dir+180)%360
+                if self.x>l-5:
+                    self.x-=self.v
+                    self.dir=(self.dir+180)%360
+                if self.y<0:
+                    self.y+=self.v
+                    self.dir=(self.dir+180)%360
+                if self.y>h-5:
+                    self.y-=self.v
+                    self.dir=(self.dir+180)%360
+
+                # non rencontre d'un mur : tourne de 10° et avance d'une distance v
+                else :
+                    self.dir=(self.dir+randint(-1,1)*10)%360
+                    self.x+=int(np.cos(np.deg2rad(self.dir))*self.v)
+                    self.y+=int(np.sin(np.deg2rad(self.dir))*self.v)
+
+        # === CHASSE ===
+        elif self.nourri<=0 and self.attente==0 and len(PROIES)>0:
+
+            # trouver la cible la plus proche
+            cible_la_plus_proche = None
+            distance_min = float('inf')
+
+            for cible in PROIES:
+                if cible.vie:        # la cible doit être vivante
+                    # calcul de la distance à la cible
+                    dx = cible.x - self.x
+                    dy = cible.y - self.y
+                    distance = (dx**2+dy**2)**0.5
+
+                    if distance < distance_min and distance > 0:
+                        distance_min = distance
+                        cible_la_plus_proche = cible
+
+            # si on a trouvé une cible : on se dirige vers elle
+            if cible_la_plus_proche:
+                dx = cible_la_plus_proche.x - self.x    # dx = distance horizontale
+                dy = cible_la_plus_proche.y - self.y    # dy = distance verticale
+                distance = (dx**2+dy**2)**0.5
+
+                if distance > 5:
+                    dx /= distance
+                    dy /= distance
+                    self.x += dx * self.v
+                    self.y += dy * self.v
+                elif distance < 5:  # cible à portée = on la mange
+                    self.modif_proies-=1
+                    cible_la_plus_proche.vie=False  # tue l'autre entité
+                    self.nourri+=self.gain_energie  # se nourrit
+
+        # === ERRANCE ===
+        else:
+            self.attente-=1         # on se rapproche d'à nouveau chasser
+            # rencontre d'un mur : va dans l'autre sens + change de direction
+            if self.x<0:
+                self.x+=self.v
+                self.dir=(self.dir+180)%360
+            if self.x>l-5:
+                self.x-=self.v
+                self.dir=(self.dir+180)%360
+            if self.y<0:
+                self.y+=self.v
+                self.dir=(self.dir+180)%360
+            if self.y>h-5:
+                self.y-=self.v
+                self.dir=(self.dir+180)%360
+
+            # non rencontre d'un mur : tourne de 10° et avance d'une distance v
+            else :
+                self.dir=(self.dir+randint(-1,1)*10)%360
+                self.x+=int(np.cos(np.deg2rad(self.dir))*self.v)
+                self.y+=int(np.sin(np.deg2rad(self.dir))*self.v)
+
+    def draw(self,ecran):
+        pygame.draw.rect(ecran, self.couleur, (self.x, self.y, 5, 5))
+
+
+class Souris:
+    def __init__(self, x, y):
+        self.dir=0
+        self.x=x
+        self.y=y
+        self.v=2
+        self.couleur=(60, 60, 60)
+        self.vie=True
+        self.nourri=0
+        self.attente=0          # attente avant de chasser
+        self.modif_proies=0
+        self.modif_semblables=0
+        self.lim_vie=-500       # meurt en dessous de cette limite de nourriture
+        self.energie_reprod=400 # énergie pour se reproduire
+        self.gain_energie=500   # énergie gagnée en mangeant
+
+
+    def update(self, PROIES, SEMBLABLES):
+        # remise à 0 des compteurs:
+        self.modif_semblables=0
+        self.modif_proies=0
+
+        self.nourri-=1
+        if self.nourri<self.lim_vie:
+            self.vie=False
+            self.modif_semblables-=1
+
+        # === REPRODUCTION ===
+        # si nourri et pas seul => cherche à se reproduire
+        if self.nourri>0 and len(SEMBLABLES)>1 and self.attente==0:
+            # trouver le partenaire le plus proche
+            part_plus_proche = None
+            distance_min = float('inf')
+
+            for part in SEMBLABLES:
+                if part.vie and part.nourri>0:# le partenaire doit être vivant + nourri
+                    # calcul de la distance au partenaire
+                    dx = part.x - self.x
+                    dy = part.y - self.y
+                    distance = (dx**2+dy**2)**0.5
+
+                    if distance < distance_min and distance > 0:
+                        distance_min = distance
+                        part_plus_proche = part
+
+            # si on a trouvé un partenaire : on se dirige vers lui
+            if part_plus_proche:
+                dx = part_plus_proche.x - self.x    # dx = distance horizontale
+                dy = part_plus_proche.y - self.y    # dy = distance verticale
+                distance = (dx**2+dy**2)**0.5
+
+                if distance > 5:
+                    dx /= distance
+                    dy /= distance
+                    self.x += dx * self.v
+                    self.y += dy * self.v
+                elif distance < 5:  # partenaire à portée => reproduction
+                    self.modif_semblables+=1
+                    self.nourri-=self.energie_reprod        # utilise son énergie
+                    self.attente+=randint(50,100)           # attend avant de chasser
+
+            else:       # si aucun semblable n'est nourri
+                # rencontre d'un mur : va dans l'autre sens + change de direction
+                if self.x<0:
+                    self.x+=self.v
+                    self.dir=(self.dir+180)%360
+                if self.x>l-5:
+                    self.x-=self.v
+                    self.dir=(self.dir+180)%360
+                if self.y<0:
+                    self.y+=self.v
+                    self.dir=(self.dir+180)%360
+                if self.y>h-5:
+                    self.y-=self.v
+                    self.dir=(self.dir+180)%360
+
+                # non rencontre d'un mur : tourne de 10° et avance d'une distance v
+                else :
+                    self.dir=(self.dir+randint(-1,1)*10)%360
+                    self.x+=int(np.cos(np.deg2rad(self.dir))*self.v)
+                    self.y+=int(np.sin(np.deg2rad(self.dir))*self.v)
+
+        # === CHASSE ===
+        elif self.nourri<=0 and self.attente==0 and len(PROIES)>0:
+
+            # trouver la cible la plus proche
+            cible_la_plus_proche = None
+            distance_min = float('inf')
+
+            for cible in PROIES:
+                if cible.vie:        # la cible doit être vivante
+                    # calcul de la distance à la cible
+                    dx = cible.x - self.x
+                    dy = cible.y - self.y
+                    distance = (dx**2+dy**2)**0.5
+
+                    if distance < distance_min and distance > 0:
+                        distance_min = distance
+                        cible_la_plus_proche = cible
+
+            # si on a trouvé une cible : on se dirige vers elle
+            if cible_la_plus_proche:
+                dx = cible_la_plus_proche.x - self.x    # dx = distance horizontale
+                dy = cible_la_plus_proche.y - self.y    # dy = distance verticale
+                distance = (dx**2+dy**2)**0.5
+
+                if distance > 5:
+                    dx /= distance
+                    dy /= distance
+                    self.x += dx * self.v
+                    self.y += dy * self.v
+                elif distance < 5:  # cible à portée = on la mange
+                    self.modif_proies-=1
+                    cible_la_plus_proche.vie=False  # tue l'autre entité
+                    self.nourri+=self.gain_energie  # se nourrit
+
+        # === ERRANCE ===
+        else:
+            self.attente-=1         # on se rapproche d'à nouveau chasser
+            # rencontre d'un mur : va dans l'autre sens + change de direction
+            if self.x<0:
+                self.x+=self.v
+                self.dir=(self.dir+180)%360
+            if self.x>l-5:
+                self.x-=self.v
+                self.dir=(self.dir+180)%360
+            if self.y<0:
+                self.y+=self.v
+                self.dir=(self.dir+180)%360
+            if self.y>h-5:
+                self.y-=self.v
+                self.dir=(self.dir+180)%360
+
+            # non rencontre d'un mur : tourne de 10° et avance d'une distance v
+            else :
+                self.dir=(self.dir+randint(-1,1)*10)%360
+                self.x+=int(np.cos(np.deg2rad(self.dir))*self.v)
+                self.y+=int(np.sin(np.deg2rad(self.dir))*self.v)
+
+    def draw(self,ecran):
+        pygame.draw.rect(ecran, self.couleur, (self.x, self.y, 5, 5))
+
+
+class Viperes:
+    def __init__(self, x, y):
+        self.dir=0
+        self.x=x
+        self.y=y
+        self.v=2
+        self.couleur=(196, 129, 54)
+        self.vie=True
+        self.nourri=0
+        self.attente=0          # attente avant de chasser
+        self.modif_proies=0
+        self.modif_semblables=0
+        self.lim_vie=-500       # meurt en dessous de cette limite de nourriture
+        self.energie_reprod=500 # énergie pour se reproduire
+        self.gain_energie=500   # énergie gagnée en mangeant
+
+    def update(self, PROIES, SEMBLABLES):
+        # remise à 0 des compteurs:
+        self.modif_semblables=0
+        self.modif_proies=0
+
+        self.nourri-=1
+        if self.nourri<self.lim_vie:
+            self.vie=False
+            self.modif_semblables-=1
+
+        # === REPRODUCTION ===
+        # si nourri et pas seul => cherche à se reproduire
+        if self.nourri>0 and len(SEMBLABLES)>1 and self.attente==0:
+            # trouver le partenaire le plus proche
+            part_plus_proche = None
+            distance_min = float('inf')
+
+            for part in SEMBLABLES:
+                if part.vie and part.nourri>0:# le partenaire doit être vivant + nourri
+                    # calcul de la distance au partenaire
+                    dx = part.x - self.x
+                    dy = part.y - self.y
+                    distance = (dx**2+dy**2)**0.5
+
+                    if distance < distance_min and distance > 0:
+                        distance_min = distance
+                        part_plus_proche = part
+
+            # si on a trouvé un partenaire : on se dirige vers lui
+            if part_plus_proche:
+                dx = part_plus_proche.x - self.x    # dx = distance horizontale
+                dy = part_plus_proche.y - self.y    # dy = distance verticale
+                distance = (dx**2+dy**2)**0.5
+
+                if distance > 5:
+                    dx /= distance
+                    dy /= distance
+                    self.x += dx * self.v
+                    self.y += dy * self.v
+                elif distance < 5:  # partenaire à portée => reproduction
+                    self.modif_semblables+=1
+                    self.nourri-=self.energie_reprod        # utilise son énergie
+                    self.attente+=randint(50,100)           # attend avant de chasser
+
+            else:       # si aucun semblable n'est nourri
+                # rencontre d'un mur : va dans l'autre sens + change de direction
+                if self.x<0:
+                    self.x+=self.v
+                    self.dir=(self.dir+180)%360
+                if self.x>l-5:
+                    self.x-=self.v
+                    self.dir=(self.dir+180)%360
+                if self.y<0:
+                    self.y+=self.v
+                    self.dir=(self.dir+180)%360
+                if self.y>h-5:
+                    self.y-=self.v
+                    self.dir=(self.dir+180)%360
+
+                # non rencontre d'un mur : tourne de 10° et avance d'une distance v
+                else :
+                    self.dir=(self.dir+randint(-1,1)*10)%360
+                    self.x+=int(np.cos(np.deg2rad(self.dir))*self.v)
+                    self.y+=int(np.sin(np.deg2rad(self.dir))*self.v)
+
+        # === CHASSE ===
+        elif self.nourri<=0 and self.attente==0 and len(PROIES)>0:
+
+            # trouver la cible la plus proche
+            cible_la_plus_proche = None
+            distance_min = float('inf')
+
+            for cible in PROIES:
+                if cible.vie:        # la cible doit être vivante
+                    # calcul de la distance à la cible
+                    dx = cible.x - self.x
+                    dy = cible.y - self.y
+                    distance = (dx**2+dy**2)**0.5
+
+                    if distance < distance_min and distance > 0:
+                        distance_min = distance
+                        cible_la_plus_proche = cible
+
+            # si on a trouvé une cible : on se dirige vers elle
+            if cible_la_plus_proche:
+                dx = cible_la_plus_proche.x - self.x    # dx = distance horizontale
+                dy = cible_la_plus_proche.y - self.y    # dy = distance verticale
+                distance = (dx**2+dy**2)**0.5
+
+                if distance > 5:
+                    dx /= distance
+                    dy /= distance
+                    self.x += dx * self.v
+                    self.y += dy * self.v
+                elif distance < 5:  # cible à portée = on la mange
+                    self.modif_proies-=1
+                    cible_la_plus_proche.vie=False  # tue l'autre entité
+                    self.nourri+=self.gain_energie  # se nourrit
+
+        # === ERRANCE ===
+        else:
+            self.attente-=1         # on se rapproche d'à nouveau chasser
+            # rencontre d'un mur : va dans l'autre sens + change de direction
+            if self.x<0:
+                self.x+=self.v
+                self.dir=(self.dir+180)%360
+            if self.x>l-5:
+                self.x-=self.v
+                self.dir=(self.dir+180)%360
+            if self.y<0:
+                self.y+=self.v
+                self.dir=(self.dir+180)%360
+            if self.y>h-5:
+                self.y-=self.v
+                self.dir=(self.dir+180)%360
+
+            # non rencontre d'un mur : tourne de 10° et avance d'une distance v
+            else :
+                self.dir=(self.dir+randint(-1,1)*10)%360
+                self.x+=int(np.cos(np.deg2rad(self.dir))*self.v)
+                self.y+=int(np.sin(np.deg2rad(self.dir))*self.v)
+
+    def draw(self,ecran):
+        pygame.draw.rect(ecran, self.couleur, (self.x, self.y, 5, 5))
+
+nb_h=int(l*h/10000)            # herbes denses : recouvre la plupart du terrain
+P_apparition=0.1
+nb_c=25
+nb_s=5
+nb_v=2
+print("P_apparition,nb_c,nb_s,nb_v=",P_apparition,",",nb_c,",",nb_s,",",nb_v,sep='')
+if input("changer une valeur ?(espace)")==' ':
+    P_apparition=float(input("probabilité d'apparition de l'herbe = "))
+    nb_c=int(input("nb de chenilles = "))
+    nb_s=int(input("nb de souris = "))
+    nb_v=int(input("nb de vipères = "))
+
+H=[Herbes(randint(0,l),randint(0,h)) for he in range(nb_h)]    # liste des chenilles
+C=[Chenilles(randint(0,l),randint(0,h)) for c in range(nb_c)]    # liste des chenilles
+S=[Souris(randint(0,l),randint(0,h)) for s in range(nb_s)]       # liste des souris
+V=[Viperes(randint(0,l),randint(0,h)) for v in range(nb_v)]      # liste des vipères
+
+# Horloge pour contrôler le FPS
+clock = pygame.time.Clock()
+
+## Boucle principale de la simulation
+
+t=0
+T=[]
+H_val=[]
+C_val=[]
+S_val=[]
+V_val=[]
+
+running = True
+while running:
+    # Données pour le tracé
+    T+=[t]
+    H_val+=[nb_h]
+    C_val+=[nb_c]
+    S_val+=[nb_s]
+    V_val+=[nb_v]
+
+    # Gestion des événements
+    for event in pygame.event.get():
+        if event.type == pygame.QUIT:
+            running = False
+
+    # Mise à jour des entités
+    for i in range(binomial(1,P_apparition)):
+        H+=[Herbes(randint(0,l),randint(0,h))]
+        nb_h+=1
+
+    for chenille in C:
+        chenille.update(H,C)
+        nb_h+=chenille.modif_proies       # modification du nb de proies
+        nb_c+=chenille.modif_semblables   # modification du nb de semblables
+        if chenille.modif_semblables>0:
+            for i in range(chenille.modif_semblables):
+                C+=[Chenilles(chenille.x,chenille.y)]     # nouvel individu
+
+    for souris in S:
+        souris.update(C,S)
+        nb_c+=souris.modif_proies       # modification du nb de proies
+        nb_s+=souris.modif_semblables   # modification du nb de semblables
+        if souris.modif_semblables>0:
+            for i in range(souris.modif_semblables):
+                S+=[Souris(souris.x,souris.y)]     # nouvel individu
+
+    for vipère in V:
+        vipère.update(S,V)
+        nb_s+=vipère.modif_proies       # modification du nb de proies
+        nb_v+=vipère.modif_semblables   # modification du nb de semblables
+        if vipère.modif_semblables>0:
+            for i in range(vipère.modif_semblables):
+                V+=[Viperes(vipère.x,vipère.y)]     # nouvel individu
+
+    # Suppression des cadavres
+    H=[herbe for herbe in H if herbe.vie]
+    C=[chenille for chenille in C if chenille.vie]
+    S=[souris for souris in S if souris.vie]
+    V=[vipère for vipère in V if vipère.vie]
+
+    # Dessin de la carte
+    ecran.fill((129, 125, 104))
+
+    # Dessin des entités
+    for herbe in H:
+        if herbe.vie:
+            herbe.draw(ecran)
+
+    for chenille in C:
+        if chenille.vie:
+            chenille.draw(ecran)
+
+    for souris in S:
+        if souris.vie:
+            souris.draw(ecran)
+
+    for vipère in V:
+        if vipère.vie:
+            vipère.draw(ecran)
+
+    t+=1
+    pygame.display.flip()   # Rafraîchir l'écran
+
+    clock.tick(60)  # 60 FPS
+
+    if nb_c + nb_s + nb_v == 0 or t>=3000:
+        running=False
+    # if t>=1000:
+    #     running=False
+
+plt.plot(T,H_val,color=(0, 90/255, 0),label='herbes')
+plt.plot(T,C_val,color=(111/255, 200/255, 219/255),label='chenilles')
+plt.plot(T,S_val,color=(60/255, 60/255, 60/255),label='souris')
+plt.plot(T,V_val,color=(196/255, 129/255, 54/255),label='vipères')
+plt.xlabel('temps')
+plt.ylabel('populations')
+plt.legend()
+plt.title("évolutions de l'écosystème")
+plt.show()
+
+pygame.quit()
