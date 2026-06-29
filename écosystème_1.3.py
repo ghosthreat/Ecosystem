@@ -2,7 +2,8 @@
 # ACTIVITE : H{pousse à des endroits aléatoires}, C{chasse H, se reproduit si nourri, meurt sans nourriture}, S{chasse C, se reproduit si nourri, meurt sans nourriture}, V{chasse S, se reproduit si nourri, meurt sans nourriture}
 # GRAPHE : OUI
 # SELECTION DES VARIABLES + FACILE : OUI
-# CREDITS : ghosthreat
+# CREDITS : Copyright (c) 2026 ghosthreat 
+# LICENSE : MIT
 
 import pygame
 import sys
